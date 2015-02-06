@@ -3,20 +3,32 @@ package godsp
 import "math"
 import "math/cmplx"
 
-func FFT(data []complex128) error {
+func isPowerOf2(n int) bool {
+	return ((n != 0) && !((n & (n - 1)) != 0))
+}
 
+func FFT(data []complex128) error {
 	//could special case a few more multiples here like 4 which is particularily efficient
 	//Also could exploit the concurrent nature of go a little more to get implicit threading
 	//could also check for perfect squares because bluestein can be done very efficient there
-	if len(data) == 0 {
+	n := len(data)
+	if n == 0 {
 		return nil
 	}
 
-	if len(data) == 1 {
+	if n == 1 {
 		return nil
 	}
 
-	if len(data)%2 == 0 {
+	if isPowerOf2(n) {
+		return FFTradix2(data)
+	}
+
+	if n%4 == 0 {
+		return FFTmod4(data)
+	}
+
+	if n%2 == 0 {
 		return FFTmod2(data)
 	}
 
@@ -36,6 +48,18 @@ func IFFT(data []complex128) error {
 		data[i] = complex(imag(v)/float64(len(data)), real(v)/float64(len(data)))
 	}
 	return nil
+}
+
+func FFTradix2(data []complex128) error {
+	//TODO: implement a non-recursing power of two implementation
+	//usefull to get rid of the function call overhead
+	return FFTmod2(data)
+}
+
+func FFTmod4(data []complex128) error {
+	//TODO: implement a recursing multiple of 4 implentation
+	//useful because twiddle factors are all 1's and j's
+	return FFTmod2(data)
 }
 
 //Not very efficient because it does a bunch of copies
