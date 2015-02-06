@@ -1,4 +1,4 @@
-package dsp
+package godsp
 
 import "math"
 import "math/cmplx"
