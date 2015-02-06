@@ -40,12 +40,12 @@ func verify(expected, received []complex128, tol float64) bool {
 
 func TestFFT(t *testing.T) {
 	for i, v := range FFTtest {
-		out, err := FFT(v.input)
+		err := FFT(v.input)
 		if err != nil {
 			t.Error("FFT erroneously resulted in: " + err.Error())
 			return
 		}
-		if !verify(v.output, out, v.tolerance) {
+		if !verify(v.output, v.input, v.tolerance) {
 			t.Error("FFT failed tolerance check item:", i, "\n")
 			return
 		}
@@ -55,12 +55,12 @@ func TestFFT(t *testing.T) {
 
 func TestIFFT(t *testing.T) {
 	for i, v := range IFFTtest {
-		out, err := IFFT(v.input)
+		err := IFFT(v.input)
 		if err != nil {
 			t.Error("IFFT erroneously resulted in: " + err.Error())
 			return
 		}
-		if !verify(v.output, out, v.tolerance) {
+		if !verify(v.output, v.input, v.tolerance) {
 			t.Error("IFFT failed tolerance check item:", i, "\n")
 			return
 		}
