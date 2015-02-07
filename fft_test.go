@@ -2,6 +2,7 @@ package godsp
 
 import "testing"
 import "math"
+import "runtime"
 
 type FFTData struct {
 	input     []complex128
@@ -76,4 +77,28 @@ func BenchmarkFFT(t *testing.B) {
 	for i := 0; i < t.N; i++ {
 		FFT(data)
 	}
+}
+
+func BenchmarkLargeFFT(t *testing.B) {
+	t.StopTimer()
+	old := runtime.GOMAXPROCS(runtime.NumCPU())
+	data := make([]complex128, 8388608)
+	data[0] = complex(1, 0)
+	t.StartTimer()
+	for i := 0; i < t.N; i++ {
+		FFT(data)
+	}
+	runtime.GOMAXPROCS(old)
+}
+
+func BenchmarkReallyLargeFFT(t *testing.B) {
+	t.StopTimer()
+	old := runtime.GOMAXPROCS(runtime.NumCPU())
+	data := make([]complex128, 50e6)
+	data[0] = complex(1, 0)
+	t.StartTimer()
+	for i := 0; i < t.N; i++ {
+		FFT(data)
+	}
+	runtime.GOMAXPROCS(old)
 }

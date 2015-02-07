@@ -2,7 +2,6 @@ package godsp
 
 import "math"
 import "math/cmplx"
-import "errors"
 
 func isPowerOf2(n int) bool {
 	return ((n != 0) && !((n & (n - 1)) != 0))
@@ -21,16 +20,18 @@ func FFT(data []complex128) error {
 		return nil
 	}
 
+	if n > 1000 { //tune this number against the goroutine overhead
+		if n%4 == 0 {
+			return FFTmod4(data)
+		}
+
+		if n%2 == 0 {
+			return FFTmod2(data)
+		}
+	}
+
 	if isPowerOf2(n) {
 		return FFTradix2(data)
-	}
-
-	if n%4 == 0 {
-		return FFTmod4(data)
-	}
-
-	if n%2 == 0 {
-		return FFTmod2(data)
 	}
 
 	return FFTBluestein(data)
@@ -60,23 +61,22 @@ func bitReverse(x, levels int) int {
 	return result
 }
 
+func getLevels(size int) int {
+	// Compute levels = floor(log2(n))
+	levels := 0
+	for size > 1 {
+		levels++
+		size = size >> 1
+	}
+
+	return levels
+}
+
 func FFTradix2(data []complex128) error {
 	// Variables
 	n := len(data)
 
-	// Compute levels = floor(log2(n))
-	temp := n
-	levels := 0
-	compare := 1
-	for temp > 1 {
-		levels++
-		temp = temp >> 1
-		compare = compare << 1
-	}
-
-	if compare != n {
-		return errors.New("Not a Power of 2") // n is not a power of 2
-	}
+	levels := getLevels(n)
 
 	// Trignometric tables
 	cmplx_table := make([]complex128, n/2)
@@ -97,7 +97,6 @@ func FFTradix2(data []complex128) error {
 	for size := 2; size <= n; size *= 2 {
 		halfsize := size / 2
 		tablestep := n / size
-
 		for i := 0; i < n; i += size {
 			k := 0
 			for j := i; j < i+halfsize; j++ {
@@ -118,35 +117,42 @@ func FFTmod4(data []complex128) error {
 	return FFTmod2(data)
 }
 
-//Not very efficient because it does a bunch of copies
-//but it does the job
 func FFTmod2(data []complex128) error {
-	evenPart := make([]complex128, len(data)/2)
-	oddPart := make([]complex128, len(data)/2)
-	twFactors := make([]complex128, len(data)/2)
+	FirstPart := data[:len(data)/2]
+	SecondPart := data[len(data)/2:]
 
-	for i := range evenPart {
-		evenPart[i] = data[2*i]
-		oddPart[i] = data[2*i+1]
-		twFactors[i] = cmplx.Exp(complex(0, 2*math.Pi*float64(i)/float64(len(data))))
+	for i := range FirstPart {
+		tw := cmplx.Exp(complex(0, 2*math.Pi*float64(i)/float64(len(data))))
+		t := tw * (FirstPart[i] - SecondPart[i])
+		FirstPart[i] = FirstPart[i] + SecondPart[i]
+		SecondPart[i] = t
 	}
 
-	err := FFT(evenPart)
-	if err != nil {
+	//Parallelize the decomp here, mod2 should only be called for very large data
+	evenResult := make(chan error)
+	oddResult := make(chan error)
+	go func() { evenResult <- FFT(FirstPart) }()
+	go func() { oddResult <- FFT(SecondPart) }()
+
+	if err := <-evenResult; err != nil {
 		return err
 	}
 
-	err = FFT(oddPart)
-	if err != nil {
+	if err := <-oddResult; err != nil {
 		return err
 	}
+	levels := getLevels(len(data))
 
-	for i := range evenPart {
-		data[i] = evenPart[i] + twFactors[i]*oddPart[i]
-		data[i+len(data)/2] = evenPart[i] - twFactors[i]*oddPart[i]
+	// Bit-reversed addressing permutation
+	for i := range data {
+		j := bitReverse(i, levels)
+		if j > i {
+			data[i], data[j] = data[j], data[i]
+		}
 	}
 	return nil
 }
+
 func nextPower(value int) int {
 	ret := 1
 	for ret < value {
@@ -179,6 +185,7 @@ func FFTBluestein(data []complex128) error {
 	}
 
 	//This can be precomputed and should be... but I'm lazy
+	//This would save alot fo memory and increase speed by a factor
 	err = FFT(wrappedChirp)
 	if err != nil {
 		return err
