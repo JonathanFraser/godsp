@@ -2,6 +2,7 @@ package godsp
 
 import "math"
 import "math/cmplx"
+import "errors"
 
 func isPowerOf2(n int) bool {
 	return ((n != 0) && !((n & (n - 1)) != 0))
@@ -50,10 +51,65 @@ func IFFT(data []complex128) error {
 	return nil
 }
 
+func bitReverse(x, levels int) int {
+	result := 0
+	for i := 0; i < levels; i++ {
+		result = (result << 1) | (x & 1)
+		x = x >> 1
+	}
+	return result
+}
+
 func FFTradix2(data []complex128) error {
-	//TODO: implement a non-recursing power of two implementation
-	//usefull to get rid of the function call overhead
-	return FFTmod2(data)
+	// Variables
+	n := len(data)
+
+	// Compute levels = floor(log2(n))
+	temp := n
+	levels := 0
+	compare := 1
+	for temp > 1 {
+		levels++
+		temp = temp >> 1
+		compare = compare << 1
+	}
+
+	if compare != n {
+		return errors.New("Not a Power of 2") // n is not a power of 2
+	}
+
+	// Trignometric tables
+	cmplx_table := make([]complex128, n/2)
+
+	for i := range cmplx_table {
+		cmplx_table[i] = cmplx.Conj(cmplx.Exp(complex(0, 2*math.Pi*float64(i)/float64(n))))
+	}
+
+	// Bit-reversed addressing permutation
+	for i := range data {
+		j := bitReverse(i, levels)
+		if j > i {
+			data[i], data[j] = data[j], data[i]
+		}
+	}
+
+	// Cooley-Tukey decimation-in-time radix-2 FFT
+	for size := 2; size <= n; size *= 2 {
+		halfsize := size / 2
+		tablestep := n / size
+
+		for i := 0; i < n; i += size {
+			k := 0
+			for j := i; j < i+halfsize; j++ {
+				t := data[j+halfsize] * cmplx_table[k]
+				data[j+halfsize] = data[j] + t
+				data[j] += t
+				k += tablestep
+			}
+		}
+	}
+
+	return nil
 }
 
 func FFTmod4(data []complex128) error {
