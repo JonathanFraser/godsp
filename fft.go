@@ -1,5 +1,6 @@
 package godsp
 
+import "errors"
 import "math"
 import "math/cmplx"
 
@@ -20,7 +21,7 @@ func FFT(data []complex128) error {
 		return nil
 	}
 
-	if n > 1000 { //tune this number against the goroutine overhead
+	if n > 1e6 { //tune this number against the goroutine overhead
 		if n%4 == 0 {
 			return FFTmod4(data)
 		}
@@ -78,19 +79,19 @@ func FFTradix2(data []complex128) error {
 
 	levels := getLevels(n)
 
-	// Trignometric tables
-	cmplx_table := make([]complex128, n/2)
-
-	for i := range cmplx_table {
-		cmplx_table[i] = cmplx.Conj(cmplx.Exp(complex(0, 2*math.Pi*float64(i)/float64(n))))
-	}
-
 	// Bit-reversed addressing permutation
 	for i := range data {
 		j := bitReverse(i, levels)
 		if j > i {
 			data[i], data[j] = data[j], data[i]
 		}
+	}
+
+	factors := make([]complex128, n)
+	for i := range factors {
+		arg := -2.0 * math.Pi * float64(i) / float64(n)
+		val := complex(math.Cos(arg), math.Sin(arg))
+		factors[i] = val
 	}
 
 	// Cooley-Tukey decimation-in-time radix-2 FFT
@@ -100,7 +101,7 @@ func FFTradix2(data []complex128) error {
 		for i := 0; i < n; i += size {
 			k := 0
 			for j := i; j < i+halfsize; j++ {
-				t := data[j+halfsize] * cmplx_table[k]
+				t := data[j+halfsize] * factors[k]
 				data[j+halfsize] = data[j] + t
 				data[j] += t
 				k += tablestep
@@ -111,9 +112,99 @@ func FFTradix2(data []complex128) error {
 	return nil
 }
 
+func getMLevel(input int) (int, error) {
+	out := 0
+	for input != 1 {
+		if input%4 != 0 {
+			return 0, errors.New("input not a power of 4")
+		}
+		input = input >> 2
+		out++
+	}
+	return out, nil
+}
+
+func FFTRadix4(data []complex128) error {
+	//public static void FFTR4(double[] X, double[] Y, int N, int M) {
+	M, err := getMLevel(len(data))
+	if err != nil {
+		return err
+	}
+
+	// N = 4 ^ M
+	// N = 1 << (M+M);
+	N := len(data)
+	N1 := 0
+	N2 := len(data)
+	I1 := 0
+	I2 := 0
+	I3 := 0
+
+	twiddles := make([]complex128, N)
+	for i := range twiddles {
+		arg := 2 * math.Pi * float64(i) / float64(N)
+		twiddles[i] = complex(math.Cos(arg), math.Sin(arg))
+	}
+
+	for K := 0; K < M; K++ {
+		N1 = N2
+		N2 = N2 / 4
+
+		for J := 0; J < N2; J++ {
+			//Should be pre-calculated for optimization
+			ind := J << uint(K)
+			Tw1 := twiddles[ind%N]
+			Tw2 := twiddles[(2*ind)%N]
+			Tw3 := twiddles[(3*ind)%N]
+
+			CO1 := real(Tw1)
+			CO2 := real(Tw2)
+			CO3 := real(Tw3)
+			SI1 := imag(Tw1)
+			SI2 := imag(Tw2)
+			SI3 := imag(Tw3)
+
+			for I := J; I < N; I += N1 {
+				I1 = I + N2
+				I2 = I1 + N2
+				I3 = I2 + N2
+				C1 := data[I] + data[I2]
+				C3 := data[I] - data[I2]
+				C2 := data[I1] + data[I3]
+				C4 := data[I1] - data[I3]
+				data[I] = C1 + C2
+
+				//These adds and subtracts are probably efficient enough
+				C2 = C1 - C2
+				C1 = complex(real(C3)-imag(C4), imag(C3)+real(C4))
+				C3 = complex(real(C3)+imag(C4), imag(C3)-real(C4))
+
+				//These mults should be able to be converted into the complex domain
+				data[I1] = complex(CO1*real(C3)+SI1*imag(C3), CO1*imag(C3)-SI1*real(C3))
+				data[I2] = complex(CO2*real(C2)+SI2*imag(C2), CO2*imag(C2)-SI2*real(C2))
+				data[I3] = complex(CO3*real(C1)+SI3*imag(C1), CO3*imag(C1)-SI3*real(C1))
+			}
+		}
+	}
+
+	// Radix-4 bit-reverse
+	J := 0
+	N2 = N >> 2
+	for I := 0; I < N-1; I++ {
+		if I < J {
+			data[I], data[J] = data[J], data[I]
+		}
+		N1 = N2
+		for J >= 3*N1 {
+			J -= 3 * N1
+			N1 >>= 2
+		}
+		J += N1
+	}
+	return nil
+}
+
 func FFTmod4(data []complex128) error {
-	//TODO: implement a recursing multiple of 4 implentation
-	//useful because twiddle factors are all 1's and j's
 	return FFTmod2(data)
 }
 

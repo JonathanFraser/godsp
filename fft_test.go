@@ -91,14 +91,26 @@ func BenchmarkLargeFFT(t *testing.B) {
 	runtime.GOMAXPROCS(old)
 }
 
-func BenchmarkReallyLargeFFT(t *testing.B) {
+func BenchmarkRadix2(t *testing.B) {
 	t.StopTimer()
 	old := runtime.GOMAXPROCS(runtime.NumCPU())
-	data := make([]complex128, 50e6)
+	data := make([]complex128, 33554432)
 	data[0] = complex(1, 0)
 	t.StartTimer()
 	for i := 0; i < t.N; i++ {
-		FFT(data)
+		FFTradix2(data)
+	}
+	runtime.GOMAXPROCS(old)
+}
+
+func BenchmarkRadix4(t *testing.B) {
+	t.StopTimer()
+	old := runtime.GOMAXPROCS(runtime.NumCPU())
+	data := make([]complex128, 33554432)
+	data[0] = complex(1, 0)
+	t.StartTimer()
+	for i := 0; i < t.N; i++ {
+		FFTradix2(data)
 	}
 	runtime.GOMAXPROCS(old)
 }
